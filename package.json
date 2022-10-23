@@ -26,7 +26,7 @@
     "bin"
   ],
   "scripts": {
-    "install": "./bin/create-keys"
+    "install": "node bin/create-keys"
   },
   "dependencies": {
     "chalk": "^1.1.3",
