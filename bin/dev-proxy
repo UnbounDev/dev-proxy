@@ -14,27 +14,42 @@ function getAbsolutePath(str) {
 }
 
 function processPorts(val, acc) {
-  var ports = val.split(':');
-  var source = ports[0];
-  var target = ports[1] || 443;
+  const vals = val.split(':');
 
-  acc.push({
-    source: source,
-    target: target,
-  });
+  const obj = {
+    localPort: 443,
+    remotePort: null,
+    remoteHost: 'localhost',
+  };
 
+  switch (vals.length) {
+  case 1:
+    obj.remotePort = vals[0];
+    break;
+  case 2:
+    obj.remotePort = vals[0];
+    obj.localPort = vals[1];
+    break;
+  case 3:
+    obj.remoteHost = vals[0];
+    obj.remotePort = vals[1];
+    obj.localPort = vals[2];
+    break;
+  default:
+    throw new Error(`Invalid proxy option: ${val}`);
+  }
+
+  acc.push(obj);
   return acc;
 }
 
 program
-  .version('1.0.0')
-  .option('-p --proxy <source:target>', 'ports to proxy', processPorts, [])
+  .version('2.2.0')
+  .option('-p --proxy <source:target>', 'ports to proxy. eg: --proxy remotehost:9000:9443 will cause https://localhost:9443/ to serve content from http://remotehost:9000/', processPorts, [])
   .option('-k --key [keyPath]', 'optional path to key file')
   .option('-c --cert [certPath]', 'optional path to cert file')
-  .option('-h --host [hostname]', 'optional hostname')
   .parse(process.argv);
 
-var hostname = program.host || 'localhost';
 var key = getAbsolutePath(program.key) || path.resolve(__dirname, '..', 'resources', 'localhost.key');
 var cert = getAbsolutePath(program.cert) || path.resolve(__dirname, '..', 'resources', 'localhost.cert');
 var proxies = program.proxy;
@@ -48,25 +63,23 @@ try {
 }
 
 proxies.forEach(function(config) {
-  var source = config.source;
-  var target = config.target;
+  const { localPort, remotePort, remoteHost } = config;
 
   proxy.createServer({
     xfwd: true,
     ws: true,
     target: {
-      host: hostname,
-      port: source
+      host: remoteHost,
+      port: remotePort,
     },
     ssl: {
       key: fs.readFileSync(key, "utf8"),
       cert: fs.readFileSync(cert, "utf8")
     }
   }).on("error", function(err, req, res) {
-    var host = 'http://' + hostname + ':' + source + req.url;
-    console.error(chalk.red(chalk.bold(err.code) + " " + host));
+    console.error(chalk.red(chalk.bold(`${err.code} http://${remoteHost}:${remotePort}${req.url}`)));
     res.destroy();
-  }).listen(target);
+  }).listen(localPort);
 
-  console.log(chalk.green("Started: http://" + hostname + ":" + source, "→ https://" + hostname + ":" + target));
+  console.log(chalk.green(`Started: http://${remoteHost}:${remotePort} → https://localhost:${localPort}`));
 });
